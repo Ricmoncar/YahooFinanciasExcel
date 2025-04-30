@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Extractor de Opciones de Yahoo Finance</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .container {
+            background-color: #f5f5f5;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+        textarea {
+            width: 100%;
+            height: 100px;
+            padding: 10px;
+            margin-bottom: 20px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            resize: vertical;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            display: block;
+            margin: 20px auto;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .progress {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+            display: none;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            font-size: 14px;
+        }
+        th, td {
+            padding: 8px;
+            text-align: left;
+            border: 1px solid #ddd;
+        }
+        th {
+            background-color: #f2f2f2;
+            position: sticky;
+            top: 0;
+        }
+        .stock-header {
+            background-color: #e0e0e0;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        .itm {
+            background-color: #e8f4f8;
+        }
+        .tableWrapper {
+            margin-bottom: 30px;
+            overflow-x: auto;
+        }
+        #downloadBtn {
+            background-color: #2196F3;
+        }
+        #downloadBtn:hover {
+            background-color: #0b7dda;
+        }
+        .hidden {
+            display: none;
+        }
+        .stockInfo {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        .stockPrice {
+            font-size: 18px;
+        }
+        .negative {
+            color: red;
+        }
+        .positive {
+            color: green;
+        }
+    </style>
+</head>
+<body>
+    <h1>Extractor de Opciones de Yahoo Finance</h1>
+    
+    <div class="container">
+        <label for="symbolsInput">Ingresa las siglas de empresas (una por línea):</label>
+        <textarea id="symbolsInput" placeholder="MSFT&#10;AAPL&#10;GOOGL">MSFT
+AAPL
+GOOGL</textarea>
+        
+        <button id="startBtn">Iniciar Extracción</button>
+        
+        <div id="progress" class="progress">
+            <p>Procesando: <span id="currentSymbol"></span></p>
+            <p>Progreso: <span id="progressCount">0</span>/<span id="totalCount">0</span></p>
+        </div>
+    </div>
+    
+    <div id="resultsContainer" class="container hidden">
+        <h2>Resultados</h2>
+        <div id="tableContainer"></div>
+        <button id="downloadBtn">Descargar Excel</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/papaparse/5.4.0/papaparse.min.js"></script>
+    
+    <script>
+        // Elementos DOM
+        const symbolsInput = document.getElementById('symbolsInput');
+        const startBtn = document.getElementById('startBtn');
+        const progressDiv = document.getElementById('progress');
+        const currentSymbolSpan = document.getElementById('currentSymbol');
+        const progressCountSpan = document.getElementById('progressCount');
+        const totalCountSpan = document.getElementById('totalCount');
+        const resultsContainer = document.getElementById('resultsContainer');
+        const tableContainer = document.getElementById('tableContainer');
+        const downloadBtn = document.getElementById('downloadBtn');
+        
+        // Datos recopilados para Excel
+        let excelData = [];
+        
+        // Evento del botón de inicio
+        startBtn.addEventListener('click', async () => {
+            // Obtener y validar símbolos
+            const symbols = symbolsInput.value.trim().split('\n')
+                .map(symbol => symbol.trim())
+                .filter(symbol => symbol.length > 0);
+            
+            if (symbols.length === 0) {
+                alert('Por favor, ingresa al menos un símbolo de empresa.');
+                return;
+            }
+            
+            // Preparar UI
+            excelData = [];
+            tableContainer.innerHTML = '';
+            progressDiv.style.display = 'block';
+            totalCountSpan.textContent = symbols.length;
+            progressCountSpan.textContent = '0';
+            startBtn.disabled = true;
+            resultsContainer.classList.add('hidden');
+            
+            // Procesar cada símbolo
+            for (let i = 0; i < symbols.length; i++) {
+                const symbol = symbols[i];
+                currentSymbolSpan.textContent = symbol;
+                progressCountSpan.textContent = i + 1;
+                
+                try {
+                    // Simulamos la extracción de datos de Yahoo Finance
+                    // En un entorno real, esto requeriría un enfoque de backend
+                    const stockData = await fetchStockData(symbol);
+                    const optionsData = await fetchOptionsData(symbol, stockData.price);
+                    
+                    // Crear una tabla para cada símbolo
+                    createStockTable(symbol, stockData, optionsData);
+                    
+                    // Añadir datos para el Excel
+                    optionsData.forEach(option => {
+                        excelData.push({
+                            Símbolo: symbol,
+                            'Precio Actual': stockData.price,
+                            'Cambio': stockData.change,
+                            'Cambio %': stockData.changePercent,
+                            'ITM/OTM': option.itm,
+                            'Precio Ejercicio': option.strike,
+                            'Última': option.lastPrice,
+                            'Cambio': option.change,
+                            'Cambio %': option.changePercent,
+                            'Volumen': option.volume,
+                            'Interés Abierto': option.openInterest,
+                            'Oferta': option.bid,
+                            'Demanda': option.ask,
+                            'Implícita': option.impliedVolatility
+                        });
+                    });
+                    
+                } catch (error) {
+                    console.error(`Error al procesar ${symbol}:`, error);
+                    tableContainer.innerHTML += `<p>Error al procesar ${symbol}: ${error.message}</p>`;
+                }
+                
+                // Pequeña pausa para no sobrecargar
+                await new Promise(r => setTimeout(r, 500));
+            }
+            
+            // Mostrar resultados y habilitar botón
+            resultsContainer.classList.remove('hidden');
+            startBtn.disabled = false;
+        });
+        
+        // Función para obtener datos del stock
+        async function fetchStockData(symbol) {
+            // En un entorno real, esto sería una llamada a la API o web scraping
+            // Aquí generamos datos simulados
+            const price = (Math.random() * 800 + 50).toFixed(2);
+            const change = (Math.random() * 20 - 10).toFixed(2);
+            const changePercent = (change / price * 100).toFixed(2);
+            
+            return {
+                symbol: symbol,
+                price: price,
+                change: change,
+                changePercent: changePercent,
+                date: new Date().toLocaleDateString()
+            };
+        }
+        
+        // Función para obtener datos de opciones
+        async function fetchOptionsData(symbol, currentPrice) {
+            // En un entorno real, esto sería scraping de la tabla de opciones
+            // Generamos entre 15-25 opciones de compra (calls)
+            const numOptions = Math.floor(Math.random() * 10) + 15;
+            const options = [];
+            
+            // Precio base alrededor del precio actual
+            const baseStrike = Math.round(currentPrice / 10) * 10;
+            
+            // Generar opciones
+            for (let i = 0; i < numOptions; i++) {
+                // Precio de ejercicio varía en intervalos de $5-10
+                const strike = (baseStrike - 50 + i * 10).toFixed(2);
+                
+                // Determinar si es ITM (In The Money) o OTM (Out The Money)
+                // Para opciones de compra (calls): ITM si strike < precio actual
+                const isITM = parseFloat(strike) < parseFloat(currentPrice);
+                
+                // Prima más alta para opciones ITM, más baja para OTM
+                let lastPrice;
+                if (isITM) {
+                    // Para ITM, la prima incluye valor intrínseco (diferencia) + algo de valor temporal
+                    lastPrice = (parseFloat(currentPrice) - parseFloat(strike) + Math.random() * 5).toFixed(2);
+                } else {
+                    // Para OTM, solo valor temporal
+                    lastPrice = (Math.random() * 8 * Math.exp(-0.1 * (parseFloat(strike) - parseFloat(currentPrice))) + 0.05).toFixed(2);
+                }
+                
+                // Valores simulados para el resto de campos
+                const change = (Math.random() * 2 - 1).toFixed(2);
+                const changePercent = ((change / lastPrice) * 100).toFixed(2);
+                const volume = Math.floor(Math.random() * 1000);
+                const openInterest = Math.floor(Math.random() * 5000);
+                const bid = (parseFloat(lastPrice) - Math.random()).toFixed(2);
+                const ask = (parseFloat(lastPrice) + Math.random()).toFixed(2);
+                const impliedVolatility = (Math.random() * 0.5 + 0.2).toFixed(2);
+                
+                options.push({
+                    itm: isITM ? "ITM" : "OTM",
+                    strike: strike,
+                    lastPrice: lastPrice,
+                    change: change,
+                    changePercent: changePercent,
+                    volume: volume,
+                    openInterest: openInterest,
+                    bid: bid,
+                    ask: ask,
+                    impliedVolatility: impliedVolatility
+                });
+            }
+            
+            return options;
+        }
+        
+        // Función para crear una tabla para cada símbolo
+        function createStockTable(symbol, stockData, optionsData) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'tableWrapper';
+            
+            // Cabecera con info del stock
+            const header = document.createElement('div');
+            header.className = 'stockInfo';
+            
+            const priceClass = parseFloat(stockData.change) >= 0 ? 'positive' : 'negative';
+            header.innerHTML = `
+                ${symbol} - ${stockData.price} 
+                <span class="${priceClass}">
+                    ${stockData.change} (${stockData.changePercent}%)
+                </span>
+            `;
+            
+            wrapper.appendChild(header);
+            
+            // Crear tabla
+            const table = document.createElement('table');
+            
+            // Encabezados de tabla
+            const headerRow = document.createElement('tr');
+            [
+                'ITM/OTM', 'Precio Ejercicio', 'Última', 'Cambio', 'Cambio %', 
+                'Volumen', 'Interés Abierto', 'Oferta', 'Demanda', 'Implícita'
+            ].forEach(text => {
+                const th = document.createElement('th');
+                th.textContent = text;
+                headerRow.appendChild(th);
+            });
+            
+            table.appendChild(headerRow);
+            
+            // Filas de datos
+            optionsData.forEach(option => {
+                const row = document.createElement('tr');
+                if (option.itm === "ITM") {
+                    row.className = 'itm';
+                }
+                
+                // Añadir celdas
+                addCell(row, option.itm);
+                addCell(row, option.strike);
+                addCell(row, option.lastPrice);
+                addCell(row, option.change, parseFloat(option.change) >= 0);
+                addCell(row, option.changePercent + '%', parseFloat(option.changePercent) >= 0);
+                addCell(row, option.volume);
+                addCell(row, option.openInterest);
+                addCell(row, option.bid);
+                addCell(row, option.ask);
+                addCell(row, option.impliedVolatility);
+                
+                table.appendChild(row);
+            });
+            
+            wrapper.appendChild(table);
+            tableContainer.appendChild(wrapper);
+        }
+        
+        // Función auxiliar para añadir celdas
+        function addCell(row, text, isPositive = null) {
+            const cell = document.createElement('td');
+            cell.textContent = text;
+            
+            if (isPositive !== null) {
+                cell.className = isPositive ? 'positive' : 'negative';
+            }
+            
+            row.appendChild(cell);
+        }
+        
+        // Evento del botón de descarga
+        downloadBtn.addEventListener('click', () => {
+            if (excelData.length === 0) {
+                alert('No hay datos para descargar.');
+                return;
+            }
+            
+            // Crear libro de Excel
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.json_to_sheet(excelData);
+            
+            // Añadir hoja al libro
+            XLSX.utils.book_append_sheet(wb, ws, 'Opciones de Compra');
+            
+            // Generar archivo y descargar
+            XLSX.writeFile(wb, 'opciones_yahoo_finance.xlsx');
+        });
+    </script>
+</body>
+</html>
